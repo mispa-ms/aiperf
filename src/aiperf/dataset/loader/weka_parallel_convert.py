@@ -694,9 +694,9 @@ def _process_task(task: _WekaTraceTask) -> _WekaProcessTaskResult:
                     "source_inner_idx": creq.get("source_inner_idx"),
                     "source_kind": creq.get("source_kind", "weka_subagent"),
                     "model": task.model_map.get(creq["model"], creq["model"]),
-                    # Flat-chain children carry capped_output_length (their
-                    # rows were top-level and honor --max-osl); subagent
-                    # children keep the recorded output_length.
+                    # Both flat-chain and subagent children carry
+                    # capped_output_length and honor --max-osl; the fallback to
+                    # output_length only applies to legacy payloads without it.
                     "max_tokens": creq.get(
                         "capped_output_length", creq["output_length"]
                     ),
