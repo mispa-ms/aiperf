@@ -211,13 +211,9 @@ def _trace_peak_context_length(trace: WekaTrace, max_osl: int | None = None) -> 
             peak = max(peak, req.input_length + capped_output(req))
         elif isinstance(req, WekaSubagentEntry):
             for child_req in req.requests:
-                # Subagent child turns emit the RECORDED output_length (they are
-                # deliberately NOT subject to --max-osl; see the child emission
-                # in _reconstruct_serial / the parallel worker child loop). The
-                # keep/drop decision must use that same uncapped output, or a
-                # trace that fits only under the cap would be kept and then 4xx
-                # mid-run on the uncapped subagent request.
-                peak = max(peak, child_req.input_length + child_req.output_length)
+                # Subagent children also honor --max-osl via _cap_output, so the
+                # keep/drop decision uses the same capped output they will send.
+                peak = max(peak, child_req.input_length + capped_output(child_req))
     return peak
 
 
@@ -2188,7 +2184,7 @@ class WekaTraceLoader(HashIdsPromptSynthesisMixin, BaseFileLoader):
                         source_inner_idx=cp.request_inner_indices[k],
                         source_kind="weka_subagent",
                         model=child_model_map.get(creq.model, creq.model),
-                        max_tokens=creq.output_length,
+                        max_tokens=self._cap_output(creq),
                         raw_messages=child_delta.delta_messages,
                         reset_context=child_delta.reset_context,
                         theoretical_prefix_cache_hit_blocks=theoretical_hit_blocks,
@@ -2402,6 +2398,9 @@ class WekaTraceLoader(HashIdsPromptSynthesisMixin, BaseFileLoader):
                         creq, cp.requests[k - 1] if k else None
                     ),
                 }
+                # Subagent children honor --synthesis-max-osl like parent turns;
+                # the worker reads capped_output_length for max_tokens.
+                req_payload["capped_output_length"] = self._cap_output(creq)
                 if trace_idle_timing is not None:
                     timing = trace_idle_timing.child_by_session_request[
                         (cp.session_id, k)
